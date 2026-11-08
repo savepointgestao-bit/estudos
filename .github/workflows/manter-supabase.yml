@@ -1,0 +1,21 @@
+name: Manter Supabase ativo
+
+# O plano gratuito do Supabase pausa o projeto depois de cerca de 1 semana sem uso.
+# Este ping chama uma função pública (com um token falso, não lê nada) a cada 3 dias.
+# Obs.: o GitHub desliga agendamentos de repositório sem nenhuma atividade por 60 dias.
+on:
+  schedule:
+    - cron: "17 11 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar o Supabase
+        run: |
+          curl -fsS -m 30 -X POST "https://otvwjuwfpkpdniqycuhc.supabase.co/rest/v1/rpc/ler_estado" \
+            -H "Content-Type: application/json" \
+            -H "apikey: sb_publishable_K40z6368hZ1Q8j998j28XQ_q_lYCMD2" \
+            -d '{"p_token":"ping"}'
+          echo
