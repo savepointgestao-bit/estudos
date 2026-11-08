@@ -28,18 +28,28 @@
 
   /* ---------- Tela de acesso ---------- */
   const css = document.createElement("style");
+  // A tela reaproveita as classes do próprio site (.app .home .saudacao .hero .btn .f-lbl),
+  // então herda céu, nuvens, chão de tijolo e o avião no tema Pixel, e segue o tema Clássico/escuro sozinha.
   css.textContent = `
-#nvGate{position:fixed;inset:0;z-index:300;background:var(--bg,#eef1f6);display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto}
-#nvGate[hidden]{display:none}
-.nv-card{width:100%;max-width:340px;background:var(--surface,#fff);color:var(--ink,#14213d);border:1px solid var(--line,#d7dce7);border-radius:16px;padding:22px 20px;display:flex;flex-direction:column;gap:14px;font-family:var(--f-body,system-ui,sans-serif)}
-.pixel .nv-card{border:3px solid var(--px);box-shadow:4px 4px 0 var(--px);border-radius:0}
-.nv-tit{font-family:var(--f-display,system-ui,sans-serif);font-weight:800;font-size:22px;margin:0}
-.nv-sub{margin:0;font-size:14px;color:var(--muted,#5b6680)}
-.nv-card label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted,#5b6680);text-transform:uppercase;letter-spacing:.08em}
-.nv-card input{background:var(--bg,#eef1f6);border:1px solid var(--line,#d7dce7);border-radius:10px;padding:12px;font-size:17px;color:var(--ink,#14213d);text-transform:none;letter-spacing:0;font-weight:400;min-width:0;font-family:inherit}
-.nv-card .btn{min-height:46px;font-size:16px}
-.nv-card .ghost{min-height:44px;font-size:14px}
-.nv-msg{margin:0;font-size:13px;color:var(--danger,#c2412d);min-height:1.2em}
+#nvGate{position:fixed;inset:0;z-index:300;background:var(--bg,#eef1f6);overflow:auto;
+  padding:max(20px,6vh) max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.nv-app{margin:0 auto}
+.nv-hero .f-lbl{color:var(--sky-ink)}
+.nv-hero input{background:var(--surface);border:2px solid var(--px,var(--line));padding:11px 12px;font-size:17px;color:var(--ink);
+  font-family:var(--f-body);font-weight:400;text-transform:none;letter-spacing:0;min-width:0;width:100%;border-radius:10px}
+.pixel .nv-hero input{border-width:3px}
+.nv-hero input:focus{outline:2px solid var(--accent);outline-offset:1px}
+.nv-hero .btn,.nv-hero .ghost{width:100%}
+.nv-hero .btn{min-height:48px;font-size:16px}
+.nv-hero .ghost{min-height:44px;font-size:14px}
+.nv-hero p{margin:0}
+.nv-hero #nvPin{text-align:center;letter-spacing:.4em;font-size:22px}
+.nv-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;touch-action:manipulation}
+.nv-hero .nv-key{min-height:52px;padding:0;font-family:var(--f-display);font-size:22px;font-weight:700;color:var(--ink);background:var(--surface);user-select:none;-webkit-user-select:none}
+.nv-hero .nv-key.sm{font-size:12px;font-weight:600}
+.nv-hero .nv-key:active{transform:translate(2px,2px)}
+.nv-msg{font-size:13px;color:var(--danger);background:var(--surface);border:2px solid var(--px,var(--line));padding:8px 10px;border-radius:10px}
+.nv-msg:empty{display:none}
 `;
   document.head.appendChild(css);
 
@@ -49,18 +59,48 @@
 
   const html = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  // O app principal roda depois deste arquivo. Enquanto ele não terminou, a tela fica só com o fundo
+  // (sem mostrar o app por baixo) e o conteúdo é desenhado no DOMContentLoaded.
+  const quando = fn => document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn, { once: true }) : fn();
+  const SOL = `<svg class="sd-ico" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>`;
+  function icone() {
+    try { if (pixelOn) return `<span class="sd-ico">${pixAviao(3)}</span>`; } catch (e) {}   // mesmo ícone da saudação do app
+    return SOL;
+  }
+  const moldura = (titulo, sub, hero) => `<div class="app home nv-app">
+      <header class="saudacao">${icone()}<div class="sd-txt"><h1>${html(titulo)}</h1><p>${html(sub)}</p></div></header>
+      ${hero}
+    </div>`;
+
   function mostrarEntrada(aviso) {
     gate.hidden = false; document.body.style.overflow = "hidden";
-    gate.innerHTML = `<form class="nv-card" id="nvForm" autocomplete="off">
-      <h1 class="nv-tit">Edital em Dia</h1>
-      <p class="nv-sub">Digite o PIN e a palavra de segurança para entrar.</p>
-      <label>PIN<input id="nvPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" required></label>
-      <label>Palavra de segurança<input id="nvPal" type="password" autocomplete="off" autocapitalize="none" required></label>
-      <p class="nv-msg" id="nvMsg" role="alert">${html(aviso || "")}</p>
-      <button class="btn" type="submit" id="nvOk">Entrar</button>
-    </form>`;
-    $nv("nvPin").focus();
-    $nv("nvForm").addEventListener("submit", entrar);
+    quando(() => {
+      gate.innerHTML = moldura("Edital em Dia", "Digite o PIN e a palavra de segurança para entrar.",
+        `<form class="hero nv-hero" id="nvForm" autocomplete="off">
+          <div class="eyebrow">Acesso</div>
+          <div class="f-lbl"><label for="nvPin">PIN</label><input id="nvPin" type="password" inputmode="none" autocomplete="off" maxlength="12" required></div>
+          <div class="nv-pad" id="nvPad" role="group" aria-label="Teclado numérico">
+            ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="ghost nv-key" data-k="${n}">${n}</button>`).join("")}
+            <button type="button" class="ghost nv-key sm" data-k="limpar">Limpar</button>
+            <button type="button" class="ghost nv-key" data-k="0">0</button>
+            <button type="button" class="ghost nv-key sm" data-k="apagar">Apagar</button>
+          </div>
+          <label class="f-lbl" for="nvPal">Palavra de segurança<input id="nvPal" type="password" autocomplete="off" autocapitalize="none" required></label>
+          <p class="nv-msg" id="nvMsg" role="alert">${html(aviso || "")}</p>
+          <button class="btn" type="submit" id="nvOk">Entrar</button>
+        </form>`);
+      $nv("nvPin").focus();
+      $nv("nvForm").addEventListener("submit", entrar);
+      // teclado numérico na tela (o PIN não abre o teclado do celular; no computador dá para digitar normalmente)
+      $nv("nvPin").addEventListener("input", e => { e.target.value = e.target.value.replace(/\D/g, ""); });
+      $nv("nvPad").addEventListener("click", ev => {
+        const b = ev.target.closest("[data-k]"); if (!b) return;
+        const i = $nv("nvPin"), k = b.dataset.k;
+        if (k === "apagar") i.value = i.value.slice(0, -1);
+        else if (k === "limpar") i.value = "";
+        else if (i.value.length < 12) i.value += k;
+      });
+    });
   }
   const $nv = id => document.getElementById(id);
   function esconder() { gate.hidden = true; gate.innerHTML = ""; document.body.style.overflow = ""; }
