@@ -6,7 +6,9 @@
 -- Como funciona:
 --  * As tabelas ficam trancadas (RLS ligado, sem nenhuma policy). A chave publica
 --    do app nao consegue ler nem gravar nada nelas diretamente.
---  * O app so fala com 4 funcoes: entrar, ler_estado, salvar_estado e sair.
+--  * Os apps so falam com 4 funcoes: entrar, ler_estado, salvar_estado e sair.
+--  * Um unico PIN + palavra vale para todos os apps. Cada app guarda os seus dados
+--    separados, pelo nome (ex.: 'estudos', 'habits').
 --  * O PIN e a palavra ficam guardados so como hash (bcrypt), nunca em texto.
 --  * 5 erros seguidos bloqueiam novas tentativas por 15 minutos.
 --  * Sessao sem prazo fixo: cada uso renova. Depois de 48h sem nenhum acesso ela
@@ -33,11 +35,23 @@ create table if not exists public.sessoes (
 alter table public.sessoes add column if not exists ultimo_acesso timestamptz not null default now();
 
 create table if not exists public.estado (
-  id         int primary key default 1 check (id = 1),
+  app        text primary key,
   dados      jsonb not null,
   versao     int not null default 1,
   atualizado timestamptz not null default now()
 );
+-- bancos criados quando so existia um app (coluna "id"): os dados viram o app 'estudos'
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'estado' and column_name = 'id') then
+    alter table public.estado add column if not exists app text;
+    update public.estado set app = 'estudos' where app is null;
+    alter table public.estado drop column id;
+    alter table public.estado alter column app set not null;
+    alter table public.estado add primary key (app);
+  end if;
+end $$;
 
 alter table public.acesso  enable row level security;
 alter table public.sessoes enable row level security;
@@ -121,14 +135,21 @@ begin
   return jsonb_build_object('ok', false, 'erro', 'incorreto', 'restantes', 5 - nf);
 end $$;
 
-create or replace function public.ler_estado(p_token text) returns jsonb
+-- versoes antigas (um app so) tinham outra assinatura: sai de cena para nao haver duas funcoes com o mesmo nome
+drop function if exists public.ler_estado(text);
+drop function if exists public.salvar_estado(text, jsonb, int, boolean);
+
+create or replace function public.ler_estado(p_token text, p_app text default 'estudos') returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare e public.estado%rowtype;
 begin
   if not public._sessao_ok(p_token) then
     return jsonb_build_object('ok', false, 'erro', 'sessao');
   end if;
-  select * into e from public.estado where id = 1;
+  if p_app is null or p_app !~ '^[a-z0-9_-]{1,32}$' then
+    return jsonb_build_object('ok', false, 'erro', 'app');
+  end if;
+  select * into e from public.estado where app = p_app;
   if not found then
     return jsonb_build_object('ok', true, 'existe', false);
   end if;
@@ -137,25 +158,28 @@ end $$;
 
 -- p_base = versao que este aparelho tinha lido. Se a nuvem mudou depois disso,
 -- devolve 'conflito' e o app pergunta qual lado manter (p_forcar = true sobrescreve).
-create or replace function public.salvar_estado(p_token text, p_dados jsonb, p_base int, p_forcar boolean default false) returns jsonb
+create or replace function public.salvar_estado(p_token text, p_dados jsonb, p_base int, p_forcar boolean default false, p_app text default 'estudos') returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v int;
 begin
   if not public._sessao_ok(p_token) then
     return jsonb_build_object('ok', false, 'erro', 'sessao');
   end if;
+  if p_app is null or p_app !~ '^[a-z0-9_-]{1,32}$' then
+    return jsonb_build_object('ok', false, 'erro', 'app');
+  end if;
   if p_dados is null or length(p_dados::text) > 5000000 then
     return jsonb_build_object('ok', false, 'erro', 'tamanho');
   end if;
-  select versao into v from public.estado where id = 1 for update;
+  select versao into v from public.estado where app = p_app for update;
   if not found then
-    insert into public.estado (id, dados, versao) values (1, p_dados, 1);
+    insert into public.estado (app, dados, versao) values (p_app, p_dados, 1);
     return jsonb_build_object('ok', true, 'versao', 1);
   end if;
   if not coalesce(p_forcar, false) and (p_base is null or p_base <> v) then
     return jsonb_build_object('ok', false, 'erro', 'conflito', 'versao', v);
   end if;
-  update public.estado set dados = p_dados, versao = v + 1, atualizado = now() where id = 1;
+  update public.estado set dados = p_dados, versao = v + 1, atualizado = now() where app = p_app;
   return jsonb_build_object('ok', true, 'versao', v + 1);
 end $$;
 
@@ -174,6 +198,9 @@ alter table public.sessoes drop column if exists expira;
 -- ---------- Permissoes: so as 4 funcoes do app ficam abertas ----------
 revoke execute on all functions in schema public from public, anon, authenticated;
 grant execute on function public.entrar(text, text)                      to anon;
-grant execute on function public.ler_estado(text)                        to anon;
-grant execute on function public.salvar_estado(text, jsonb, int, boolean) to anon;
+grant execute on function public.ler_estado(text, text)                  to anon;
+grant execute on function public.salvar_estado(text, jsonb, int, boolean, text) to anon;
 grant execute on function public.sair(text)                              to anon;
+
+-- avisa a API do Supabase que as funcoes mudaram
+notify pgrst, 'reload schema';

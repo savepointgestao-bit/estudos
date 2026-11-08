@@ -4,13 +4,31 @@
    - um token de sessão, que não tem prazo fixo mas vale só enquanto o app for usado:
      passadas 48h sem acesso o PIN é pedido de novo;
    - a palavra de segurança, salva na primeira vez que foi digitada (por isso depois só se pede o PIN).
-   O PIN nunca é guardado. */
+   O PIN nunca é guardado.
+
+   Serve a mais de um app no mesmo Supabase (mesmo PIN e palavra, dados separados por nome de app).
+   O config.js de cada app diz quem ele é:
+     window.NUVEM = { url, chave, app: "habits", ls: "habits:nuvem", visual: "px", titulo: "Habits" };
+   e, se o app guarda os dados de outro jeito que o Estudos, define window.NUVEM_APP = { ler, real, trocar }. */
 (function () {
   const C = window.NUVEM || {};
   if (!C.url || !C.chave) return;
 
-  const DADOS = "edital-em-dia-v2";        // mesma chave do app
-  const LS = DADOS + ":nuvem";
+  const APP = C.app || "estudos";          // nome dos dados deste app no banco
+  const VIS = C.visual === "px" ? "px" : "site";
+  const DADOS = "edital-em-dia-v2";        // chave dos dados do Estudos
+  const LS = C.ls || (DADOS + ":nuvem");   // onde esta aparelho guarda a sessão
+  // Como a nuvem enxerga os dados do app. O padrão é o do Estudos (variável S); outros apps trocam estas três funções.
+  const A = Object.assign({
+    ler: () => (typeof S === "undefined" ? null : S),
+    real: () => typeof S !== "undefined" && !S.exemplo,                   // false = ainda só dados de exemplo
+    trocar: dados => {                                                    // adota os dados da nuvem e recarrega
+      dados.exemplo = false; S = dados;                                   // S e KEY vêm do script principal
+      try { localStorage.setItem(DADOS, JSON.stringify(S)); } catch (e) {}
+      location.hash = "#inicio"; location.reload();
+    },
+  }, window.NUVEM_APP || {});
+  const TITULO = C.titulo || "Edital em Dia";
   const H48 = 48 * 3600e3;                 // sem acessar por mais que isso: pede o PIN de novo
   let est = { token: "", base: null, sujo: false, palavra: "", ultimo: 0 };
   try { Object.assign(est, JSON.parse(localStorage.getItem(LS)) || {}); } catch (e) {}
@@ -31,10 +49,9 @@
   }
 
   /* ---------- Tela de acesso ---------- */
-  const css = document.createElement("style");
   // A tela reaproveita as classes do próprio site (.app .home .saudacao .hero .btn .f-lbl),
   // então herda céu, nuvens, chão de tijolo e o avião no tema Pixel, e segue o tema Clássico/escuro sozinha.
-  css.textContent = `
+  const CSS_SITE = `
 #nvGate{position:fixed;inset:0;z-index:300;background:var(--bg,#eef1f6);overflow:auto;
   padding:max(20px,6vh) max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
 .app.home.nv-app{margin:0 auto;display:flex;flex-direction:column;max-width:460px}
@@ -56,6 +73,34 @@
 .nv-msg:empty{display:none}
 .nv-salva{font-size:13px;color:var(--sky-ink,var(--ink))}
 `;
+  // Visual "px": moldura pixel do app Habits (variáveis --bg --panel --field --text --muted --ink --accent --font do próprio app)
+  const CSS_PX = `
+#nvGate{position:fixed;inset:0;z-index:300;background:var(--bg);color:var(--text);font-family:var(--font);overflow:auto;
+  padding:max(24px,7vh) max(19px,env(safe-area-inset-right,0px)) 44px max(19px,env(safe-area-inset-left,0px))}
+.nvp{max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.nvp-head{display:flex;align-items:center;gap:14px;margin:0 2px}
+.nvp-head svg{flex:none;width:64px;height:48px;shape-rendering:crispEdges}
+.nvp-head h1{margin:0;font-size:24px;font-weight:700}
+.nvp-head p{margin:4px 0 0;color:var(--muted);font-size:14px}
+.nvp-card{background:var(--panel);padding:16px;display:flex;flex-direction:column;gap:12px;
+  box-shadow:0 -3px 0 0 var(--ink),0 3px 0 0 var(--ink),-3px 0 0 0 var(--ink),3px 0 0 0 var(--ink),0 7px 0 0 var(--drop)}
+.nvp-card h2{margin:0;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.nvp-card label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--muted)}
+.nvp-card input{background:var(--field);border:0;box-shadow:0 0 0 2px var(--ink);padding:11px 12px;font-size:17px;color:var(--text);outline:none;width:100%;min-width:0;font-weight:400}
+.nvp-card input:focus{box-shadow:0 0 0 2px var(--ink),0 0 0 5px var(--accent)}
+.nvp-card #nvPin{text-align:center;letter-spacing:.4em;font-size:22px}
+.nvp-card .btn{flex:none;width:100%}
+.nv-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;touch-action:manipulation}
+.nvp-card .nv-key{height:52px;font-size:22px;padding:0;user-select:none;-webkit-user-select:none}
+.nvp-card .nv-key.sm{font-size:13px}
+.nvp-card .nv-key:active{transform:translate(2px,2px)}
+.nvp-card p{margin:0}
+.nv-salva{font-size:13px;color:var(--muted)}
+.nv-msg{font-size:13px;color:var(--danger);background:var(--field);padding:8px 10px}
+.nv-msg:empty{display:none}
+`;
+  const css = document.createElement("style");
+  css.textContent = VIS === "px" ? CSS_PX : CSS_SITE;
   document.head.appendChild(css);
 
   const gate = document.createElement("div");
@@ -72,7 +117,26 @@
     try { if (pixelOn) return `<span class="sd-ico">${pixAviao(3)}</span>`; } catch (e) {}   // mesmo ícone da saudação do app
     return SOL;
   }
-  const moldura = (titulo, sub, hero) => `<div class="app home nv-app">
+  // avião pixel (o mesmo do ícone do app) para o visual "px"
+  const AVIAO_PX = (() => {
+    const L = ["................", "..kk............", "..kbk...........", "..kbbk..........", "..kbbbkkkkkkk...", ".kkbbbbbbbbwwkk.",
+      "kybbbbbbbbbbbbbk", ".kkkkbbbbbbbbkk.", "....kbbbkkkkk...", "....kbbk........", "....kbk.........", "....kk.........."];
+    const cor = { k: "#1b1f3b", b: "#2b4fd6", w: "#ffffff", y: "#f8b800" };
+    let r = "";
+    L.forEach((row, y) => { for (let x = 0; x < 16;) { const c = row[x]; if (c === ".") { x++; continue; } let n = 1; while (row[x + n] === c) n++; r += `<rect x="${x}" y="${y}" width="${n}" height="1" fill="${cor[c]}"/>`; x += n; } });
+    return `<svg viewBox="0 0 16 12" aria-hidden="true">${r}</svg>`;
+  })();
+  // pedaços que mudam de um visual para o outro
+  const K = VIS === "px" ? {
+    caixa: "nvp-card", titulo: "h2", pin: i => `<label for="nvPin">PIN${i}</label>`, pal: i => `<label for="nvPal">Palavra de segurança${i}</label>`,
+    tecla: "btn ghost nv-key", ghost: "btn ghost", btn: "btn",
+  } : {
+    caixa: "hero nv-hero", titulo: "div", pin: i => `<div class="f-lbl"><label for="nvPin">PIN</label>${i}</div>`, pal: i => `<label class="f-lbl" for="nvPal">Palavra de segurança${i}</label>`,
+    tecla: "ghost nv-key", ghost: "ghost", btn: "btn",
+  };
+  const moldura = (titulo, sub, hero) => VIS === "px"
+    ? `<div class="nvp"><header class="nvp-head">${AVIAO_PX}<div><h1>${html(titulo)}</h1><p>${html(sub)}</p></div></header>${hero}</div>`
+    : `<div class="app home nv-app">
       <header class="saudacao">${icone()}<div class="sd-txt"><h1>${html(titulo)}</h1><p>${html(sub)}</p></div></header>
       ${hero}
     </div>`;
@@ -80,22 +144,22 @@
   function mostrarEntrada(aviso) {
     gate.hidden = false; document.body.style.overflow = "hidden";
     quando(() => {
-      gate.innerHTML = moldura("Edital em Dia", est.palavra ? "Digite o PIN para entrar." : "Digite o PIN e a palavra de segurança para entrar.",
-        `<form class="hero nv-hero" id="nvForm" autocomplete="off">
-          <div class="eyebrow">Acesso</div>
-          <div class="f-lbl"><label for="nvPin">PIN</label><input id="nvPin" type="password" inputmode="none" autocomplete="off" maxlength="12" required></div>
+      gate.innerHTML = moldura(TITULO, est.palavra ? "Digite o PIN para entrar." : "Digite o PIN e a palavra de segurança para entrar.",
+        `<form class="${K.caixa}" id="nvForm" autocomplete="off">
+          <${K.titulo} class="eyebrow">Acesso</${K.titulo}>
+          ${K.pin(`<input id="nvPin" type="password" inputmode="none" autocomplete="off" maxlength="12" required>`)}
           <div class="nv-pad" id="nvPad" role="group" aria-label="Teclado numérico">
-            ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="ghost nv-key" data-k="${n}">${n}</button>`).join("")}
-            <button type="button" class="ghost nv-key sm" data-k="limpar">Limpar</button>
-            <button type="button" class="ghost nv-key" data-k="0">0</button>
-            <button type="button" class="ghost nv-key sm" data-k="apagar">Apagar</button>
+            ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="${K.tecla}" data-k="${n}">${n}</button>`).join("")}
+            <button type="button" class="${K.tecla} sm" data-k="limpar">Limpar</button>
+            <button type="button" class="${K.tecla}" data-k="0">0</button>
+            <button type="button" class="${K.tecla} sm" data-k="apagar">Apagar</button>
           </div>
           ${est.palavra
             ? `<p class="nv-salva" id="nvSalva">Palavra de segurança salva neste aparelho.</p>
-          <button type="button" class="ghost" id="nvTroca">Trocar palavra</button>`
-            : `<label class="f-lbl" for="nvPal">Palavra de segurança<input id="nvPal" type="password" autocomplete="off" autocapitalize="none" required></label>`}
+          <button type="button" class="${K.ghost}" id="nvTroca">Trocar palavra</button>`
+            : K.pal(`<input id="nvPal" type="password" autocomplete="off" autocapitalize="none" required>`)}
           <p class="nv-msg" id="nvMsg" role="alert">${html(aviso || "")}</p>
-          <button class="btn" type="submit" id="nvOk">Entrar</button>
+          <button class="${K.btn}" type="submit" id="nvOk">Entrar</button>
         </form>`);
       $nv("nvPin").focus();
       $nv("nvForm").addEventListener("submit", entrar);
@@ -163,9 +227,9 @@
   function pedirEscolha(r) {
     gate.hidden = false; document.body.style.overflow = "hidden";
     gate.innerHTML = moldura("Dados diferentes", "Os dados da nuvem são diferentes dos deste aparelho. Qual você quer manter? O outro lado será substituído.",
-      `<div class="hero nv-hero">
-        <button class="btn" type="button" id="nvNuvem">Usar os da nuvem</button>
-        <button class="ghost" type="button" id="nvAqui">Manter os deste aparelho</button>
+      `<div class="${K.caixa}">
+        <button class="${K.btn}" type="button" id="nvNuvem">Usar os da nuvem</button>
+        <button class="${K.ghost}" type="button" id="nvAqui">Manter os deste aparelho</button>
       </div>`);
     $nv("nvNuvem").onclick = () => adotar(r);
     $nv("nvAqui").onclick = async () => {
@@ -175,19 +239,18 @@
   }
 
   function adotar(r) {
-    S = r.dados; S.exemplo = false;                       // S e KEY vêm do script principal
-    try { localStorage.setItem(DADOS, JSON.stringify(S)); } catch (e) {}
     est.base = r.versao; est.sujo = false; gravar();
-    location.hash = "#inicio"; location.reload();
+    A.trocar(r.dados);
   }
 
   /* ---------- Sincronização ---------- */
   async function enviar(forcar) {
-    if (typeof S === "undefined" || S.exemplo) return;      // não sobe os dados de exemplo
-    const r = await rpc("salvar_estado", { p_token: est.token, p_dados: S, p_base: est.base, p_forcar: !!forcar });
+    if (!A.ler() || !A.real()) return;                       // não sobe os dados de exemplo
+    const dados = A.ler();
+    const r = await rpc("salvar_estado", { p_token: est.token, p_dados: dados, p_base: est.base, p_forcar: !!forcar, p_app: APP });
     if (r.ok) { est.base = r.versao; est.sujo = false; gravar(); statusTxt = "ok"; }
     else if (r.erro === "sessao") sessaoInvalida();
-    else if (r.erro === "conflito") { const l = await rpc("ler_estado", { p_token: est.token }); if (l.ok && l.existe) pedirEscolha(l); }
+    else if (r.erro === "conflito") { const l = await rpc("ler_estado", { p_token: est.token, p_app: APP }); if (l.ok && l.existe) pedirEscolha(l); }
     else statusTxt = "erro";
   }
 
@@ -195,10 +258,10 @@
     if (!est.token || ocupado) return;
     ocupado = true;
     try {
-      const r = await rpc("ler_estado", { p_token: est.token });
+      const r = await rpc("ler_estado", { p_token: est.token, p_app: APP });
       if (!r.ok) return sessaoInvalida();
       tocar();
-      const localReal = typeof S !== "undefined" && !S.exemplo;
+      const localReal = !!A.ler() && A.real();
       if (!r.existe) { if (localReal) await enviar(false); else statusTxt = "ok"; }
       else if (est.base === r.versao) { if (est.sujo) await enviar(false); else statusTxt = "ok"; }
       else if (!localReal || (est.base != null && !est.sujo)) adotar(r);   // aparelho novo, ou nuvem mais nova e nada alterado aqui
@@ -221,11 +284,13 @@
   };
 
   /* ---------- Parte da tela de Ajustes ---------- */
+  // [classe, texto] do estado da nuvem; o app pode usar para desenhar a própria seção
+  window.nuvemStatus = () => statusTxt === "ok" && !est.sujo ? ["on", "Tudo salvo na nuvem."]
+    : statusTxt === "offline" ? ["", "Sem conexão. Suas alterações ficam no aparelho e sobem quando a internet voltar."]
+    : statusTxt === "erro" ? ["", "Não consegui salvar na nuvem agora. Vou tentar de novo."]
+    : est.sujo ? ["", "Alterações ainda não enviadas para a nuvem."] : ["", "Conectado."];
   window.nuvemAjustes = function () {
-    const t = statusTxt === "ok" && !est.sujo ? ["on", "Tudo salvo na nuvem."]
-      : statusTxt === "offline" ? ["", "Sem conexão. Suas alterações ficam no aparelho e sobem quando a internet voltar."]
-      : statusTxt === "erro" ? ["", "Não consegui salvar na nuvem agora. Vou tentar de novo."]
-      : est.sujo ? ["", "Alterações ainda não enviadas para a nuvem."] : ["", "Conectado."];
+    const t = window.nuvemStatus();
     return `<div class="c-sec"><span class="f-lbl">Nuvem</span>
       <p class="aj-status ${t[0]}">${t[1]}</p>
       <div class="row aj-btns">
