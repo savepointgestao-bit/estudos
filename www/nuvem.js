@@ -33,7 +33,7 @@
   css.textContent = `
 #nvGate{position:fixed;inset:0;z-index:300;background:var(--bg,#eef1f6);overflow:auto;
   padding:max(20px,6vh) max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
-.nv-app{margin:0 auto}
+.app.home.nv-app{margin:0 auto;display:flex;flex-direction:column;max-width:460px}
 .nv-hero .f-lbl{color:var(--sky-ink)}
 .nv-hero input{background:var(--surface);border:2px solid var(--px,var(--line));padding:11px 12px;font-size:17px;color:var(--ink);
   font-family:var(--f-body);font-weight:400;text-transform:none;letter-spacing:0;min-width:0;width:100%;border-radius:10px}
