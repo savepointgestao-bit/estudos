@@ -1,6 +1,6 @@
 {
   "appId": "br.app.editalemdia",
-  "appName": "Edital em Dia",
+  "appName": "Estudos",
   "webDir": "www",
   "android": {
     "backgroundColor": "#d6ecff"
