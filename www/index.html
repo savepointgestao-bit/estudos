@@ -826,6 +826,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   </div>
 </nav>
 
+<script src="config.js"></script>
+<script src="nuvem.js"></script>
 <script src="sortable.min.js"></script>
 <script>
 const KEY = "edital-em-dia-v2";
@@ -2625,6 +2627,7 @@ async function aplicarBackup(pacote) {
   }
   S = pacote.dados; S.exemplo = false;
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+  if (typeof nuvemSujo === "function") nuvemSujo();
   location.hash = "#inicio"; location.reload();
 }
 let bkTimer = null, bkUlt = null;
@@ -2680,7 +2683,7 @@ async function notificarPomodoro(segundos, titulo) {
   } catch (e) {}
 }
 let notifTimer = null;
-function aposSalvar() { agendarAutoBackup(); clearTimeout(notifTimer); notifTimer = setTimeout(agendarNotificacoes, 3000); }
+function aposSalvar() { agendarAutoBackup(); if (typeof nuvemSujo === "function") nuvemSujo(); clearTimeout(notifTimer); notifTimer = setTimeout(agendarNotificacoes, 3000); }
 if (NATIVO && CP.App) {
   CP.App.addListener("backButton", () => {
     if (!$("cardModal").hidden) return fecharCartao();
@@ -2715,6 +2718,8 @@ async function renderAjustes() {
       <p class="note">Na reta final, a tela inicial mostra os tópicos para revisar antes da prova, o Cadete Ari prioriza revisões e simulados, e a reorganização automática coloca simulados antes de conteúdo novo.</p>
     </div>
 
+    ${typeof nuvemAjustes === "function" ? nuvemAjustes() : ""}
+
     <div class="c-sec"><span class="f-lbl">Backup dos seus dados</span>
       <p class="aj-status ${copias.length ? "on" : ""}">${copias.length ? `Cópia automática ativa: ${copias.length} ${copias.length === 1 ? "cópia guardada" : "cópias guardadas"} neste aparelho, a mais recente de ${fmtData(copias[0].dia)} às ${new Date(copias[0].criado).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.` : S.exemplo ? "A cópia automática começa assim que você editar seus próprios dados." : "A primeira cópia automática é feita alguns segundos depois da próxima alteração."}</p>
       ${NATIVO ? `<p class="note">No app instalado, uma cópia por dia também é salva em Documentos/EditalEmDia, fora do app. As 7 mais recentes ficam guardadas.</p>`
@@ -2742,6 +2747,7 @@ $("ajModal").addEventListener("click", async e => {
   if (e.target.id === "ajModal") return fecharAjustes();
   const a = e.target.closest("[data-aj]")?.dataset.aj; if (!a) return;
   if (a === "fechar") return fecharAjustes();
+  if (a.startsWith("nuvem:")) { await nuvemAcao(a.slice(6)); return renderAjustes(); }
   if (a === "copiar") {
     const json = JSON.stringify(await montarBackup(false));
     try { await navigator.clipboard.writeText(json); ajMsg = "Backup copiado. Cole num e-mail para você mesma ou num bloco de notas. Anexos não entram nesta cópia."; renderAjustes(); }

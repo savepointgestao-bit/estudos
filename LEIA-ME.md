@@ -78,3 +78,19 @@ Instalar o APK novo por cima mantém seus dados, desde que o `appId` em `capacit
 | `.github/workflows/gerar-apk.yml` | Receita que o GitHub usa para montar o APK |
 
 O APK gerado é de teste (debug), para uso pessoal. Ele não serve para publicar na Play Store; para isso seria preciso uma assinatura própria, que dá para configurar depois.
+
+---
+
+## Site no GitHub Pages
+
+O `index.html` da raiz só leva para `www/`, onde está o app de verdade. Com o Pages ligado em Settings > Pages > Deploy from a branch > `main` / `(root)`, o endereço é `https://SEU-USUARIO.github.io/estudos/`.
+
+## Nuvem com PIN e palavra de segurança (Supabase)
+
+Opcional. Sem configurar, o app funciona só no aparelho, como antes.
+
+1. No Supabase, crie um projeto e rode `supabase/1-schema.sql` no SQL Editor.
+2. Rode `supabase/2-definir-pin.sql` trocando o PIN e a palavra pelos seus.
+3. Preencha `www/config.js` com a URL do projeto e a chave pública (anon ou publishable). Nunca coloque a `service_role`.
+
+Depois disso o app pede PIN e palavra de segurança, e só abre se os dois estiverem certos (5 erros bloqueiam por 15 minutos). Os dados dos estudos ficam salvos na nuvem e sincronizam entre aparelhos. Anexos continuam só no aparelho.
