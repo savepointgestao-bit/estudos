@@ -1,0 +1,13 @@
+{
+  "appId": "br.app.editalemdia",
+  "appName": "Edital em Dia",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#d6ecff"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#2b4fd6"
+    }
+  }
+}

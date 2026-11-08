@@ -1,0 +1,23 @@
+{
+  "name": "edital-em-dia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Edital em Dia: app de estudos para a EAOAP da FAB",
+  "scripts": {
+    "android:criar": "npx cap add android && node scripts/permissoes.js && npx @capacitor/assets generate --android && npx cap sync android",
+    "android:atualizar": "npx cap sync android",
+    "android:abrir": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "6.2.3",
+    "@capacitor/app": "6.0.3",
+    "@capacitor/core": "6.2.3",
+    "@capacitor/filesystem": "6.0.4",
+    "@capacitor/local-notifications": "6.1.3",
+    "@capacitor/share": "6.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "6.2.3"
+  }
+}
