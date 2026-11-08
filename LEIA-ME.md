@@ -1,4 +1,4 @@
-# Edital em Dia: como gerar o APK
+# Estudos (Edital em Dia): como gerar o APK
 
 Esta pasta é o projeto do app pronto para virar um APK de Android. Ele funciona sem internet: fontes, ícone e todo o código já estão aqui dentro.
 
@@ -24,7 +24,7 @@ O GitHub monta o APK na nuvem para você.
    - **Mac:** aperte Cmd + Shift + ponto.
 5. Clique em **Commit changes**.
 6. Vá na aba **Actions**. Vai aparecer "Gerar APK" rodando (bolinha amarela). Leva uns 5 a 8 minutos.
-7. Quando ficar verde, clique nele e, lá embaixo em **Artifacts**, baixe `edital-em-dia-apk`. Dentro do .zip está o `app-debug.apk`.
+7. Quando ficar verde, clique nele e, lá embaixo em **Artifacts**, baixe `estudos-apk`. Dentro do .zip está o `app-debug.apk`.
 
 Se a pasta `.github` não subir, o passo 6 não acontece. Nesse caso, no repositório clique em **Add file → Create new file**, escreva o nome `.github/workflows/gerar-apk.yml`, cole o conteúdo do arquivo de mesmo nome desta pasta e salve.
 
@@ -71,8 +71,8 @@ Instalar o APK novo por cima mantém seus dados, desde que o `appId` em `capacit
 | Arquivo | Para que serve |
 |---|---|
 | `www/` | O app em si (página, fontes e biblioteca de arrastar) |
-| `assets/` | Ícone e tela de abertura em pixel art |
-| `capacitor.config.json` | Nome e identificador do app |
+| `assets/` | Ícone (avião pixel no céu) e tela de abertura |
+| `capacitor.config.json` | Nome (Estudos) e identificador do app |
 | `package.json` | Bibliotecas usadas (Capacitor 6 e plugins) |
 | `scripts/permissoes.js` | Adiciona as permissões de notificação e de salvar o backup |
 | `.github/workflows/gerar-apk.yml` | Receita que o GitHub usa para montar o APK |
@@ -94,3 +94,12 @@ Opcional. Sem configurar, o app funciona só no aparelho, como antes.
 3. Preencha `www/config.js` com a URL do projeto e a chave pública (anon ou publishable). Nunca coloque a `service_role`.
 
 Depois disso o app pede PIN e palavra de segurança, e só abre se os dois estiverem certos (5 erros bloqueiam por 15 minutos). Os dados dos estudos ficam salvos na nuvem e sincronizam entre aparelhos. Anexos continuam só no aparelho.
+
+Como o acesso funciona no dia a dia:
+
+- Não há logout por tempo fixo. Cada vez que o app é usado, o prazo renova. Se ficar **48h sem ser aberto**, o PIN é pedido de novo.
+- A **palavra de segurança fica salva no aparelho** depois da primeira vez. Nos próximos acessos só o PIN é pedido. O botão "Trocar palavra" (na tela do PIN) apaga a palavra salva e deixa digitar outra.
+- O PIN nunca fica guardado no aparelho.
+- Depois de 48h parado é preciso internet para digitar o PIN e voltar a usar o app.
+
+Para atualizar o banco depois de mudanças no `1-schema.sql`, rode o arquivo inteiro de novo no SQL Editor. Ele é seguro para rodar mais de uma vez e não apaga o PIN, a palavra nem os dados.

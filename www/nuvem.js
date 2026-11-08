@@ -1,14 +1,18 @@
 /* Nuvem: acesso por PIN + palavra de segurança e cópia dos dados no Supabase.
    Se o config.js estiver vazio, nada aqui roda e o app funciona só no aparelho.
-   O PIN e a palavra são conferidos no servidor. Este arquivo só guarda um token
-   de sessão (30 dias) neste aparelho, nunca o PIN nem a palavra. */
+   O PIN e a palavra são conferidos no servidor. Neste aparelho ficam guardados:
+   - um token de sessão, que não tem prazo fixo mas vale só enquanto o app for usado:
+     passadas 48h sem acesso o PIN é pedido de novo;
+   - a palavra de segurança, salva na primeira vez que foi digitada (por isso depois só se pede o PIN).
+   O PIN nunca é guardado. */
 (function () {
   const C = window.NUVEM || {};
   if (!C.url || !C.chave) return;
 
   const DADOS = "edital-em-dia-v2";        // mesma chave do app
   const LS = DADOS + ":nuvem";
-  let est = { token: "", base: null, sujo: false };
+  const H48 = 48 * 3600e3;                 // sem acessar por mais que isso: pede o PIN de novo
+  let est = { token: "", base: null, sujo: false, palavra: "", ultimo: 0 };
   try { Object.assign(est, JSON.parse(localStorage.getItem(LS)) || {}); } catch (e) {}
   const gravar = () => { try { localStorage.setItem(LS, JSON.stringify(est)); } catch (e) {} };
 
@@ -50,6 +54,7 @@
 .nv-hero .nv-key:active{transform:translate(2px,2px)}
 .nv-msg{font-size:13px;color:var(--danger);background:var(--surface);border:2px solid var(--px,var(--line));padding:8px 10px;border-radius:10px}
 .nv-msg:empty{display:none}
+.nv-salva{font-size:13px;color:var(--sky-ink,var(--ink))}
 `;
   document.head.appendChild(css);
 
@@ -75,7 +80,7 @@
   function mostrarEntrada(aviso) {
     gate.hidden = false; document.body.style.overflow = "hidden";
     quando(() => {
-      gate.innerHTML = moldura("Edital em Dia", "Digite o PIN e a palavra de segurança para entrar.",
+      gate.innerHTML = moldura("Edital em Dia", est.palavra ? "Digite o PIN para entrar." : "Digite o PIN e a palavra de segurança para entrar.",
         `<form class="hero nv-hero" id="nvForm" autocomplete="off">
           <div class="eyebrow">Acesso</div>
           <div class="f-lbl"><label for="nvPin">PIN</label><input id="nvPin" type="password" inputmode="none" autocomplete="off" maxlength="12" required></div>
@@ -85,12 +90,16 @@
             <button type="button" class="ghost nv-key" data-k="0">0</button>
             <button type="button" class="ghost nv-key sm" data-k="apagar">Apagar</button>
           </div>
-          <label class="f-lbl" for="nvPal">Palavra de segurança<input id="nvPal" type="password" autocomplete="off" autocapitalize="none" required></label>
+          ${est.palavra
+            ? `<p class="nv-salva" id="nvSalva">Palavra de segurança salva neste aparelho.</p>
+          <button type="button" class="ghost" id="nvTroca">Trocar palavra</button>`
+            : `<label class="f-lbl" for="nvPal">Palavra de segurança<input id="nvPal" type="password" autocomplete="off" autocapitalize="none" required></label>`}
           <p class="nv-msg" id="nvMsg" role="alert">${html(aviso || "")}</p>
           <button class="btn" type="submit" id="nvOk">Entrar</button>
         </form>`);
       $nv("nvPin").focus();
       $nv("nvForm").addEventListener("submit", entrar);
+      if ($nv("nvTroca")) $nv("nvTroca").onclick = () => { est.palavra = ""; gravar(); mostrarEntrada(); };
       // teclado numérico na tela (o PIN não abre o teclado do celular; no computador dá para digitar normalmente)
       $nv("nvPin").addEventListener("input", e => { e.target.value = e.target.value.replace(/\D/g, ""); });
       $nv("nvPad").addEventListener("click", ev => {
@@ -107,18 +116,20 @@
 
   async function entrar(ev) {
     ev.preventDefault();
-    const pin = $nv("nvPin").value.trim(), pal = $nv("nvPal").value, msg = $nv("nvMsg"), bt = $nv("nvOk");
+    const pin = $nv("nvPin").value.trim(), msg = $nv("nvMsg"), bt = $nv("nvOk");
+    const pal = $nv("nvPal") ? $nv("nvPal").value : est.palavra;      // palavra salva ou digitada agora
     bt.disabled = true; msg.textContent = "Entrando...";
     try {
       const r = await rpc("entrar", { p_pin: pin, p_palavra: pal });
       if (r.ok) {
-        est = { token: r.token, base: est.base, sujo: est.sujo }; gravar();
+        est = { token: r.token, base: est.base, sujo: est.sujo, palavra: pal, ultimo: Date.now() }; gravar();
         esconder(); sincronizar(); return;
       }
-      $nv("nvPal").value = ""; $nv("nvPin").value = "";
+      if ($nv("nvPal")) $nv("nvPal").value = "";
+      $nv("nvPin").value = "";
       if (r.erro === "bloqueado") msg.textContent = `Muitas tentativas. Tente de novo em ${r.minutos} min.`;
       else if (r.erro === "nao_configurado") msg.textContent = "O acesso ainda não foi configurado no servidor.";
-      else msg.textContent = `PIN ou palavra de segurança incorretos.${r.restantes != null && r.restantes <= 2 ? ` Restam ${r.restantes} tentativas.` : ""}`;
+      else msg.textContent = `PIN ou palavra de segurança incorretos.${est.palavra ? " Se a palavra mudou, toque em Trocar palavra." : ""}${r.restantes != null && r.restantes <= 2 ? ` Restam ${r.restantes} tentativas.` : ""}`;
     } catch (e) {
       msg.textContent = "Sem conexão com o servidor. Confira a internet e tente de novo.";
     }
@@ -127,18 +138,35 @@
 
   function sessaoInvalida() {
     est.token = ""; gravar(); statusTxt = "";
-    mostrarEntrada("Sua sessão expirou. Entre de novo.");
+    mostrarEntrada("Sua sessão expirou. Digite o PIN de novo.");
+  }
+
+  /* Sem prazo fixo: só vale a regra das 48h sem acessar. Cada uso renova (aqui e no servidor). */
+  let ultimoGrav = 0;
+  function tocar(agora) {
+    est.ultimo = Date.now();
+    if (agora || est.ultimo - ultimoGrav > 60000) { ultimoGrav = est.ultimo; gravar(); }
+  }
+  const expirouLocal = () => !!est.token && !!est.ultimo && Date.now() - est.ultimo > H48;
+  function expirar48() {
+    est.token = ""; est.ultimo = 0; gravar(); statusTxt = "";
+    mostrarEntrada("Faz mais de 48h que você não acessa. Digite o PIN de novo.");
+  }
+  // devolve true se pode continuar usando; senão já mostra a tela do PIN
+  function usar() {
+    if (!est.token) return false;
+    if (expirouLocal()) { expirar48(); return false; }
+    tocar(); return true;
   }
 
   /* ---------- Escolha quando nuvem e aparelho divergem ---------- */
   function pedirEscolha(r) {
     gate.hidden = false; document.body.style.overflow = "hidden";
-    gate.innerHTML = `<div class="nv-card">
-      <h1 class="nv-tit">Dados diferentes</h1>
-      <p class="nv-sub">Os dados da nuvem são diferentes dos deste aparelho. Qual você quer manter? O outro lado será substituído.</p>
-      <button class="btn" type="button" id="nvNuvem">Usar os da nuvem</button>
-      <button class="ghost" type="button" id="nvAqui">Manter os deste aparelho</button>
-    </div>`;
+    gate.innerHTML = moldura("Dados diferentes", "Os dados da nuvem são diferentes dos deste aparelho. Qual você quer manter? O outro lado será substituído.",
+      `<div class="hero nv-hero">
+        <button class="btn" type="button" id="nvNuvem">Usar os da nuvem</button>
+        <button class="ghost" type="button" id="nvAqui">Manter os deste aparelho</button>
+      </div>`);
     $nv("nvNuvem").onclick = () => adotar(r);
     $nv("nvAqui").onclick = async () => {
       esconder();
@@ -169,6 +197,7 @@
     try {
       const r = await rpc("ler_estado", { p_token: est.token });
       if (!r.ok) return sessaoInvalida();
+      tocar();
       const localReal = typeof S !== "undefined" && !S.exemplo;
       if (!r.existe) { if (localReal) await enviar(false); else statusTxt = "ok"; }
       else if (est.base === r.versao) { if (est.sujo) await enviar(false); else statusTxt = "ok"; }
@@ -203,7 +232,7 @@
         <button type="button" class="btn sm" data-aj="nuvem:sync">Sincronizar agora</button>
         <button type="button" class="ghost" data-aj="nuvem:sair">Sair deste aparelho</button>
       </div>
-      <p class="note">Os dados dos estudos ficam salvos na nuvem, protegidos pelo PIN e pela palavra de segurança. Anexos ficam só neste aparelho.</p>
+      <p class="note">Os dados dos estudos ficam salvos na nuvem, protegidos pelo PIN e pela palavra de segurança. Passadas 48h sem abrir o app, o PIN é pedido de novo (a palavra fica salva neste aparelho). Anexos ficam só neste aparelho.</p>
     </div>`;
   };
   window.nuvemAcao = async function (a) {
@@ -212,16 +241,25 @@
     }
     if (a === "sair") {
       try { await rpc("sair", { p_token: est.token }); } catch (e) {}
-      est = { token: "", base: null, sujo: false }; gravar(); statusTxt = "";
+      // mantém a versão e o "sujo" para, ao entrar de novo, não perguntar qual lado manter à toa
+      est = { token: "", base: est.base, sujo: est.sujo, palavra: est.palavra, ultimo: 0 }; gravar(); statusTxt = "";
       mostrarEntrada();
     }
   };
 
   /* ---------- Início ---------- */
-  if (!est.token) mostrarEntrada();
-  window.addEventListener("load", () => { if (est.token) sincronizar(); });
+  if (est.token && !est.ultimo) { est.ultimo = Date.now(); gravar(); }   // sessão de antes desta regra: conta a partir de agora
+  if (expirouLocal()) expirar48();
+  else if (!est.token) mostrarEntrada();
+  window.addEventListener("load", () => { if (usar()) sincronizar(); });
   window.addEventListener("online", () => { if (est.token && est.sujo) sincronizar(); });
+  // qualquer toque ou tecla conta como uso (e pega o caso do app ficar aberto por dias sem ninguém mexer)
+  ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, () => { usar(); }, true));
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden" && est.token && est.sujo && !ocupado) { clearTimeout(timer); sincronizar(); }
+    if (!est.token) return;
+    if (document.visibilityState === "hidden") {
+      tocar(true);                                                              // guarda a hora da última vez que usou
+      if (est.sujo && !ocupado) { clearTimeout(timer); sincronizar(); }
+    } else if (usar()) sincronizar();                                          // voltou ao app: confere a sessão e puxa o que mudou
   });
 })();

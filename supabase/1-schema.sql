@@ -1,5 +1,7 @@
 -- Edital em Dia: banco na nuvem protegido por PIN + palavra de seguranca.
--- Rode este arquivo inteiro UMA vez, no SQL Editor do projeto novo do Supabase.
+-- Rode este arquivo inteiro no SQL Editor do projeto novo do Supabase.
+-- Pode rodar de novo a qualquer momento: ele atualiza as funcoes e ajusta a tabela de
+-- sessoes sem apagar o PIN, a palavra nem os dados dos estudos.
 --
 -- Como funciona:
 --  * As tabelas ficam trancadas (RLS ligado, sem nenhuma policy). A chave publica
@@ -7,6 +9,8 @@
 --  * O app so fala com 4 funcoes: entrar, ler_estado, salvar_estado e sair.
 --  * O PIN e a palavra ficam guardados so como hash (bcrypt), nunca em texto.
 --  * 5 erros seguidos bloqueiam novas tentativas por 15 minutos.
+--  * Sessao sem prazo fixo: cada uso renova. Depois de 48h sem nenhum acesso ela
+--    deixa de valer e o app pede o PIN de novo.
 
 create extension if not exists pgcrypto with schema extensions;
 create extension if not exists unaccent with schema extensions;
@@ -23,8 +27,10 @@ create table if not exists public.acesso (
 create table if not exists public.sessoes (
   token_hash text primary key,
   criado     timestamptz not null default now(),
-  expira     timestamptz not null
+  ultimo_acesso timestamptz not null default now()
 );
+-- bancos criados na versao anterior (sessao de 30 dias) ganham a coluna nova
+alter table public.sessoes add column if not exists ultimo_acesso timestamptz not null default now();
 
 create table if not exists public.estado (
   id         int primary key default 1 check (id = 1),
@@ -44,14 +50,17 @@ language sql stable set search_path = public, extensions, pg_temp as $$
   select lower(regexp_replace(extensions.unaccent(btrim(coalesce(t, ''))), '\s+', ' ', 'g'))
 $$;
 
+-- Sessao valida = usada nas ultimas 48h. Cada chamada valida renova o prazo.
 create or replace function public._sessao_ok(p_token text) returns boolean
-language sql security definer set search_path = public, extensions, pg_temp as $$
-  select exists (
-    select 1 from public.sessoes
-    where token_hash = encode(extensions.digest(coalesce(p_token, ''), 'sha256'), 'hex')
-      and expira > now()
-  )
-$$;
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare n int;
+begin
+  update public.sessoes set ultimo_acesso = now()
+  where token_hash = encode(extensions.digest(coalesce(p_token, ''), 'sha256'), 'hex')
+    and ultimo_acesso > now() - interval '48 hours';
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
 
 -- Define (ou troca) o PIN e a palavra. Rode so pelo SQL Editor (2-definir-pin.sql).
 create or replace function public.definir_acesso(p_pin text, p_palavra text) returns text
@@ -95,10 +104,9 @@ begin
 
   if ok_pin and ok_pal then
     update public.acesso set falhas = 0, bloqueado_ate = null where id = 1;
-    delete from public.sessoes where expira < now();
+    delete from public.sessoes where ultimo_acesso < now() - interval '48 hours';
     tok := encode(extensions.gen_random_bytes(32), 'hex');
-    insert into public.sessoes (token_hash, expira)
-    values (encode(extensions.digest(tok, 'sha256'), 'hex'), now() + interval '30 days');
+    insert into public.sessoes (token_hash) values (encode(extensions.digest(tok, 'sha256'), 'hex'));
     return jsonb_build_object('ok', true, 'token', tok);
   end if;
 
@@ -158,6 +166,10 @@ begin
   where token_hash = encode(extensions.digest(coalesce(p_token, ''), 'sha256'), 'hex');
   return jsonb_build_object('ok', true);
 end $$;
+
+-- ---------- Limpeza da versao anterior ----------
+-- (depois de trocar as funcoes acima, que nao usam mais a coluna "expira")
+alter table public.sessoes drop column if exists expira;
 
 -- ---------- Permissoes: so as 4 funcoes do app ficam abertas ----------
 revoke execute on all functions in schema public from public, anon, authenticated;
