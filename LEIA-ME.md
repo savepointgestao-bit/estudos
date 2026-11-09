@@ -90,7 +90,7 @@ O `index.html` da raiz só leva para `www/`, onde está o app de verdade. Com o 
 Opcional. Sem configurar, o app funciona só no aparelho, como antes.
 
 1. No Supabase, crie um projeto e rode `supabase/1-schema.sql` no SQL Editor.
-2. Rode `supabase/2-definir-pin.sql` trocando o PIN e a palavra pelos seus.
+2. Rode `supabase/2-definir-pin.sql` trocando o nome da conta, o PIN e a palavra pelos seus.
 3. Preencha `www/config.js` com a URL do projeto e a chave pública (anon ou publishable). Nunca coloque a `service_role`.
 
 Depois disso o app pede PIN e palavra de segurança, e só abre se os dois estiverem certos (5 erros bloqueiam por 15 minutos). Os dados dos estudos ficam salvos na nuvem e sincronizam entre aparelhos. Anexos continuam só no aparelho.
@@ -101,5 +101,7 @@ Como o acesso funciona no dia a dia:
 - A **palavra de segurança fica salva no aparelho** depois da primeira vez. Nos próximos acessos só o PIN é pedido. O botão "Trocar palavra" (na tela do PIN) apaga a palavra salva e deixa digitar outra.
 - O PIN nunca fica guardado no aparelho.
 - Depois de 48h parado é preciso internet para digitar o PIN e voltar a usar o app.
+
+Várias pessoas, cada uma com os seus dados: rode o `2-definir-pin.sql` de novo com **outro nome**, outro PIN e outra palavra. Cada conta enxerga só os dados dela, nos dois apps. Duas contas podem ter o mesmo PIN se as palavras forem diferentes. Rodar com um nome que já existe troca o PIN e a palavra dessa conta (os dados ficam). As outras contas não são tocadas. Os 5 erros seguidos que bloqueiam por 15 minutos contam para todas as contas juntas.
 
 Para atualizar o banco depois de mudanças no `1-schema.sql`, rode o arquivo inteiro de novo no SQL Editor. Ele é seguro para rodar mais de uma vez e não apaga o PIN, a palavra nem os dados.
